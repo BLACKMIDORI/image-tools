@@ -8,3 +8,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "=0.2.91"
+js-sys = "0.3.68"
+image = "0.25.0-preview.0"
+base64 = "0.21.7"
+console_log = "1.0.0"
+log = "0.4.21"
+regex = "1.10.3"
+bytes = "1.5.0"
