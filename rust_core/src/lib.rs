@@ -1,3 +1,6 @@
+mod app_image;
+mod image_info;
+
 use std::io::{Cursor};
 use log::{error, Level};
 use log::info;
@@ -5,28 +8,21 @@ use log::info;
 use base64::{engine::general_purpose};
 use std::sync::{Mutex};
 use base64::{Engine};
-use image::{DynamicImage, ImageFormat, imageops};
-use image::imageops::FilterType;
+use image::{ImageFormat, imageops};
+use image::imageops::{FilterType};
 use wasm_bindgen::prelude::*;
 use regex::{Regex};
+use crate::app_image::{AppImage, MimeType};
+use crate::image_info::ImageInfo;
 
-// Import the `window.alert` function from the Web.
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     fn console_log(s: &str);
-    fn alert(s: &str);
 }
 
-static IMAGE: Mutex<Option<(String,DynamicImage)>> = Mutex::new(None);
-// static IMAGE_CALLBACK: Arc<Mutex<Option<&js_sys::Function>>> = Arc::new(Mutex::new(None));
-
-// Export a `greet` function from Rust to JavaScript, that alerts a
-// hello message.
-#[wasm_bindgen]
-pub fn greet(name: &str) {
-    alert(&format!("Hello, {}!", name));
-}
+static IMAGE_INCREMENT: Mutex<u32> = Mutex::new(0);
+static IMAGES: Mutex<Vec<AppImage>> = Mutex::new(Vec::new());
 
 #[wasm_bindgen]
 pub fn initialize() {
@@ -41,18 +37,18 @@ pub fn initialize() {
 }
 
 #[wasm_bindgen]
-pub fn set_image(data_url: &str) {
+pub fn add_image(name: &str, data_url: &str) {
     let url_parts:Vec<&str> = data_url.split("base64,").collect();
     let data_url_prefix = format!("{}base64,",url_parts[0]);
-    let regex = Regex::new(r"data:image/(.+);base64,").unwrap();
+    let regex = Regex::new(r"data:(.+);base64,").unwrap();
 
     match regex.captures(&data_url_prefix){
         None => {
-            info!("Invalid image format: {}",data_url_prefix)
+            info!("Invalid data url format: {}",data_url_prefix)
         }
         Some(captures) => {
             let group = captures.get(1).unwrap();
-            let mime: String = group.as_str().to_string();
+            let mime_type: String = group.as_str().to_string();
 
             let image_base64 = url_parts[1];
             let image_bytes_result = general_purpose::STANDARD.decode(image_base64);
@@ -62,8 +58,24 @@ pub fn set_image(data_url: &str) {
                 }
                 Ok(image_bytes) => {
                     let image = image::load_from_memory(&image_bytes).unwrap();
-                    let mut image_mutex = IMAGE.lock().unwrap();
-                    *image_mutex = Some((mime,image))
+                    let mut images_mutex = IMAGES.lock().unwrap();
+                    let mut image_id_mutex = IMAGE_INCREMENT.lock().unwrap();
+                    images_mutex.push(AppImage{
+                        id: *image_id_mutex,
+                        name: name.to_string(),
+                        width: image.width(),
+                        height: image.height(),
+                        mime_type: match mime_type.as_str(){
+                            "image/png"=>MimeType::ImagePng,
+                            "image/jpeg"=>MimeType::ImageJpeg,
+                            _ => {
+                                error!("Invalid mime type. Only png and jpeg is supported currently.");
+                                return;
+                            }
+                        },
+                        lib_image: image
+                    });
+                    *image_id_mutex +=1
                 }
             }
         }
@@ -72,29 +84,42 @@ pub fn set_image(data_url: &str) {
 }
 
 #[wasm_bindgen]
-pub fn scale_image(scale: f32, ratio: f32) -> String{
-    let image_mutex = IMAGE.lock().unwrap();
-    let image_option = &*image_mutex;
+pub fn get_images_info()-> String{
+    let mut images_info = Vec::new();
+    for app_image in IMAGES.lock().unwrap().iter(){
+        images_info.push(ImageInfo::from(app_image))
+    }
+
+    return serde_json::to_string(&images_info).unwrap();
+}
+
+#[wasm_bindgen]
+pub fn scale_image(id: u32, width: u32, height: u32, smooth: bool) -> String{
+    let images_mutex = &*IMAGES.lock().unwrap();
+    let image_option= images_mutex.iter().find(|e|e.id == id);
     match image_option {
         None => {
             info!("No image to scale");
         }
-        Some((mime, image)) => {
-            let image = imageops::resize(image, (scale*ratio*500.0).round() as u32, (scale*500.0).round() as u32, FilterType::Nearest);
+        Some(app_image) => {
+            let mime_type = &app_image.mime_type;
+            let image = &app_image.lib_image;
+            let image = imageops::resize(image, width, height, match smooth {false=>FilterType::Nearest, true=>FilterType::Gaussian});
             let mut buffer = Vec::new();
-            match mime.as_str() {
-                "png"=>{
+            match mime_type{
+                MimeType::ImagePng => {
                     let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png);
                 }
-                "jpeg"=>{
-                    let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg);
+                MimeType::ImageJpeg => {
+                    // TODO: fix bug exporting Jpeg
+                    let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png);
                 }
-                _=>{
-                    info!("Not compatible format: {mime}")
-                }
+                // _=>{
+                //     info!("Not compatible format: {mime_type}")
+                // }
             }
             let image_base64 = general_purpose::STANDARD.encode(&buffer);
-            return format!("data:image/{mime};base64,{image_base64}");
+            return format!("data:{mime_type};base64,{image_base64}");
         }
     }
     "".to_string()

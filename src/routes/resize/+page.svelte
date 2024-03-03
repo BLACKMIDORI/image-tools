@@ -1,18 +1,30 @@
 <script lang="ts">
 	import rustCore from '$lib/rust-core';
+	import debounce from '$lib/debounce';
 	import { onMount } from 'svelte';
 	onMount(async () => {
 		document.addEventListener('wasm_loaded', () => {
 			console.log('Setting callback function');
 		});
 	});
+	let dragover = false;
 
-	let imageSrc: string | null = null;
-
-	let width = 16;
-	let height = 9;
-	let scale = 1;
-    let step = 1;
+	let images: Array<{ id: number; name: string; width: number; height: number; mimeType: string }> =
+		[];
+	let imagesState: {
+		[id: number]: {
+			width: number;
+			height: number;
+			aspectRatio: undefined | number;
+			dataUrl: string;
+		};
+	} = {};
+	let currentState:
+		| undefined
+		| {
+				id: number;
+				state: { width: number; height: number; aspectRatio: undefined | number; dataUrl: string };
+		  } = undefined;
 
 	function handleFiles(files: Array<File>) {
 		if (files.length > 0) {
@@ -20,8 +32,23 @@
 			var reader = new FileReader();
 			reader.onload = function (event: any) {
 				const dataUrl = event.target.result;
-				rustCore.wasm.set_image(dataUrl);
-				imageSrc = rustCore.wasm.scale_image(1, width/height);
+				// rustCore.wasm.
+				rustCore.wasm.add_image(file.name, dataUrl);
+				images = JSON.parse(rustCore.wasm.get_images_info());
+				images.forEach((image) => {
+					if (!imagesState[image.id]) {
+						currentState = {
+							id: image.id,
+							state: {
+								width: image.width,
+								height: image.height,
+								aspectRatio: image.width / image.height,
+								dataUrl: dataUrl
+							}
+						};
+						imagesState[image.id] = currentState!.state;
+					}
+				});
 			};
 			reader.readAsDataURL(file);
 		}
@@ -39,66 +66,243 @@
 		handleFiles(files);
 	}
 
-	function onChangeSlider(event: any) {
-		scale = Number(event.target.value) / 100;
-		imageSrc = rustCore.wasm.scale_image(scale, width/height);
+	function scaleImage(width: number, height: number, smooth = false) {
+		const imageId = currentState!.id;
+		currentState!.state.width = Math.max(1, Math.round(width));
+		currentState!.state.height = Math.max(1, Math.round(height));
+		currentState!.state.dataUrl = rustCore.wasm.scale_image(
+			imageId,
+			currentState!.state.width,
+			currentState!.state.height,
+			smooth
+		);
 	}
-    function onChangeSliderInput(event:any){
-		scale = Number(event.target.value) / 100;
-		imageSrc = rustCore.wasm.scale_image(scale, width/height);
-    }
-    function onChangeStepInput(event:any){
-		step = Number(event.target.value) ;
-    }
-    function onChangeWidth(event:any){
-        width = Number(event.target.value)
-		imageSrc = rustCore.wasm.scale_image(scale, width/height);
-    }
-    function onChangeHeight(event:any){
-        height = Number(event.target.value)
-		imageSrc = rustCore.wasm.scale_image(scale, width/height);
-    }
 
+	function getScaledSize(scale: number, image: {width: number, height: number}){
+		const width = image.width * scale;
+		let height = image.height * scale;
+		if(currentState?.state.aspectRatio){
+			height = width/currentState?.state.aspectRatio
+		}
+		return {width, height}
+	}
+
+	let onInputRangeDebounce: Function | undefined;
+	function onInputRange(event: any) {
+		event.target.value = event.target.value;
+		const scale = Number(event.target.value) / 100;
+		const imageId = currentState!.id;
+		const originalImage = images.find((x) => x.id == imageId);
+		const {width,height} = getScaledSize(scale,originalImage!)
+		scaleImage(width, height);
+		onInputRangeDebounce =
+			onInputRangeDebounce ??
+			debounce((width: number, height: number) => {
+				onInputRangeDebounce = undefined;
+				scaleImage(width, height, true);
+			}, 300);
+		onInputRangeDebounce(width, height);
+	}
+
+	function onChangeRange(event: any) {
+		const scale = Number(event.target.value) / 100;
+		const imageId = currentState!.id;
+		const originalImage = images.find((x) => x.id == imageId);
+		const {width,height} = getScaledSize(scale,originalImage!)
+		scaleImage(width, height, true);
+	}
+	function onChangeScaleInput(event: any) {
+		const scale = Number(event.target.value) / 100;
+		const imageId = currentState!.id;
+		const originalImage = images.find((x) => x.id == imageId);
+		const {width,height} = getScaledSize(scale,originalImage!)
+		scaleImage(width, height, true);
+	}
+	function onChangeWidth(event: any) {
+		const width = Number(event.target.value);
+		if (currentState?.state.aspectRatio) {
+			scaleImage(width, width / currentState!.state.aspectRatio);
+		} else {
+			scaleImage(width, currentState!.state.height);
+		}
+	}
+	function onChangeHeight(event: any) {
+		const height = Number(event.target.value);
+		if (currentState?.state.aspectRatio) {
+			scaleImage(height * currentState!.state.aspectRatio, height);
+		} else {
+			scaleImage(currentState!.state.width, height);
+		}
+	}
+
+	function toggleApectRatio() {
+		if (currentState?.state.aspectRatio) {
+			currentState!.state.aspectRatio = undefined;
+		} else {
+			currentState!.state.aspectRatio = currentState!.state.width / currentState!.state.height;
+		}
+	}
+
+	function calculateScale(imageId: number, width: number, height: number) {
+		const originalImage = images.find((x) => x.id == imageId);
+		if (!originalImage) {
+			return 1;
+		}
+		return width / originalImage!.width;
+	}
+	var gcd = function (a: number, b: number) {
+		if (!b) {
+			return a;
+		}
+
+		return gcd(b, a % b);
+	};
 </script>
 
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div
-	class="drop-area"
-	id="drop-area"
-	on:dragover={(event) => event.preventDefault()}
-	on:drop={handleDrop}
->
-	<p>Drag & Drop your image here</p>
-	<p>or</p>
-	<input class="hidden" type="file" id="fileInput" on:change={onFilesChange} />
-	<label for="fileInput">Browse</label>
-</div>
-{#if imageSrc !== null}
-	<div class="w-full">
-		<input type="range" min="0" max="200" value="100" class="slider" on:input={onChangeSlider} />
-        <input type="number" step={step} value={scale*100} on:input={onChangeSliderInput}/>
-
-        Step:
-        <input type="number" step={0.1} value={step} on:input={onChangeStepInput}/>
+<div class="flex flex-row h-[calc(100%-130px)] w-[100dvw]">
+	<div class="flex-1 pr-2 border-r-2">
+		<div class="h-[100%] flex flex-col w-[100%]">
+			<div
+				aria-hidden="true"
+				class="{dragover
+					? 'border-gray-200'
+					: 'border-[rgba(0,0,0,0)] border-b-[#ccc]'} w-[100%] flex flex-row border-2 border-dashed h-[100px]"
+				on:dragleave={(event) => (dragover = false)}
+				on:dragover={(event) => {
+					event.preventDefault();
+					dragover = true;
+				}}
+				on:drop={(event) => {
+					dragover = false;
+					handleDrop(event);
+				}}
+			>
+				<div class="whitespace-nowrap overflow-auto w-[calc(100dvw-400px)] flex">
+					{#each Object.entries(imagesState) as [key, imageState]}
+						<!-- svelte-ignore a11y-click-events-have-key-events -->
+						<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+						<img
+							on:click={() => (currentState = { id: Number(key), state: imageState })}
+							alt="image id {key}"
+							src={imageState.dataUrl}
+							class="inline-block border-2 {currentState?.id == Number(key)
+								? 'border-[theme(colors.MIDORI)]'
+								: 'border-[rgba(0,0,0,0)]'}"
+						/>
+					{/each}
+				</div>
+				<div class="flex-1" />
+				<div
+					class="{!dragover
+						? 'border-gray-200'
+						: 'border-[rgba(0,0,0,0)]'} border-2 border-dashed rounded-2xl w-[120px] h-[90px] text-center"
+				>
+					<input class="hidden" type="file" id="fileInput" on:change={onFilesChange} />
+					<label class="block w-[100%] h-[100%] flex items-center justify-center" for="fileInput">
+						<div class="">
+							<p>Drag & Drop</p>
+							<p>or</p>
+							<p>Browse</p>
+						</div>
+					</label>
+				</div>
+			</div>
+			<div class="flex-1">
+				{#if currentState !== undefined}
+					<div class="h-[100%] flex flex-col justify-center">
+						<div class="relative flex justify-center">
+							<div class="absolute right-0">
+								<a href={currentState.state.dataUrl} download={images[currentState.id].name}>
+									<button class="p-1 rounded-2xl border-2"> Download </button>
+								</a>
+							</div>
+							<span> Size: {currentState.state.width}x{currentState.state.height} </span>
+							<span>&nbsp;</span>
+							<span
+								>Aspect ratio: {currentState.state.width /
+									gcd(currentState.state.width, currentState.state.height)}:{currentState.state
+									.height / gcd(currentState.state.width, currentState.state.height)}</span
+							>
+						</div>
+						<div class="flex-1">
+							<div class="h-[100%] flex align-center justify-center">
+								<img
+									class="max-h-96 self-center"
+									id="preview"
+									src={currentState.state.dataUrl}
+									alt="Preview"
+								/>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</div>
 	</div>
-    <br/>
-	<span> Aspect ratio: <input type="number" step="1" value={width} on:change={onChangeWidth}>:<input type="number" step="1" value={height} on:change={onChangeHeight}></span>
-    <br/>
-	<span> Size: {(scale*(width/height) * 500).toFixed()}x{scale * 500} </span>
-	<img id="preview" src={imageSrc} alt="Preview" />
-{/if}
+	<div class="pl-2 w-[600px] overflow-auto">
+		<div>
+			<input
+				disabled={!currentState}
+				type="range"
+				min="0"
+				max="200"
+				value={currentState
+					? calculateScale(currentState.id, currentState.state.width, currentState.state.height) *
+						100
+					: 100}
+				class="slider"
+				on:input={onInputRange}
+				on:change={onChangeRange}
+			/>
+			<br />
+			<br />
+			Scale (%):
+			<input
+				disabled={!currentState}
+				class="w-[50px]"
+				type="number"
+				value={(currentState
+					? calculateScale(currentState.id, currentState.state.width, currentState.state.height) *
+						100
+					: 100
+				).toFixed()}
+				on:input={onChangeScaleInput}
+			/>
+			<br />
+			<br />
+			<span>
+				Size: <input
+					disabled={!currentState}
+					class="w-[50px]"
+					type="number"
+					step="1"
+					value={currentState?.state.width ?? 0}
+					on:input={onChangeWidth}
+				/> x <input
+					disabled={!currentState}
+					class="w-[50px]"
+					type="number"
+					step="1"
+					value={currentState?.state.height ?? 0}
+					on:input={onChangeHeight}
+				/></span
+			>
+
+			<br />
+			<br />
+			<input
+				type="checkbox"
+				disabled={!currentState}
+				checked={currentState?!!currentState.state.aspectRatio: true}
+				on:change={toggleApectRatio}
+			/>
+			Lock aspect ratio
+		</div>
+	</div>
+</div>
 
 <style>
-	.drop-area {
-		border: 2px dashed #ccc;
-		border-radius: 20px;
-		padding: 20px;
-		text-align: center;
-		font-family: Arial, sans-serif;
-		margin: 20px auto;
-		width: 300px;
-	}
-	.drop-area.highlight {
-		border-color: #007bff;
+	:global(body) {
+		height: 100dvh;
 	}
 </style>
