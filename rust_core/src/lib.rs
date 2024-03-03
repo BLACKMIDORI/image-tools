@@ -62,12 +62,13 @@ pub fn add_image(name: &str, data_url: &str) {
                     let mut image_id_mutex = IMAGE_INCREMENT.lock().unwrap();
                     images_mutex.push(AppImage{
                         id: *image_id_mutex,
-                        name: name.to_string(),
+                        name: name.to_string().replace(".jpg",".png").replace(".jpeg", ".png"),
                         width: image.width(),
                         height: image.height(),
                         mime_type: match mime_type.as_str(){
                             "image/png"=>MimeType::ImagePng,
-                            "image/jpeg"=>MimeType::ImageJpeg,
+                            // TODO: fix bug exporting Jpeg
+                            "image/jpeg"=>MimeType::ImagePng,
                             _ => {
                                 error!("Invalid mime type. Only png and jpeg is supported currently.");
                                 return;
@@ -111,8 +112,7 @@ pub fn scale_image(id: u32, width: u32, height: u32, smooth: bool) -> String{
                     let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png);
                 }
                 MimeType::ImageJpeg => {
-                    // TODO: fix bug exporting Jpeg
-                    let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png);
+                    let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg);
                 }
                 // _=>{
                 //     info!("Not compatible format: {mime_type}")
