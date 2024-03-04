@@ -160,13 +160,13 @@
 </script>
 
 <div class="flex flex-row h-[calc(100%-130px)] w-[100dvw]">
-	<div class="flex-1 pr-2 border-r-2">
+	<div class="flex-1 pr-2 border-r-2 border-[theme(colors.grey)]">
 		<div class="h-[100%] flex flex-col w-[100%]">
 			<div
 				aria-hidden="true"
 				class="{dragover
 					? 'border-gray-200'
-					: 'border-[rgba(0,0,0,0)] border-b-[#ccc]'} w-[100%] flex flex-row border-2 border-dashed h-[100px]"
+					: 'border-[rgba(0,0,0,0)] border-b-[theme(colors.grey)]'} w-[100%] flex flex-row border-2 border-dashed h-[100px]"
 				on:dragleave={(event) => (dragover = false)}
 				on:dragover={(event) => {
 					event.preventDefault();
@@ -177,7 +177,7 @@
 					handleDrop(event);
 				}}
 			>
-				<div class="whitespace-nowrap overflow-auto w-[calc(100dvw-400px)] flex">
+				<div class="whitespace-nowrap overflow-auto flex">
 					{#each Object.entries(imagesState) as [key, imageState]}
 						<!-- svelte-ignore a11y-click-events-have-key-events -->
 						<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -194,8 +194,8 @@
 				<div class="flex-1" />
 				<div
 					class="{!dragover
-						? 'border-gray-200'
-						: 'border-[rgba(0,0,0,0)]'} border-2 border-dashed rounded-2xl w-[120px] h-[90px] text-center"
+						? 'border-[theme(colors.grey)]'
+						: 'border-[rgba(0,0,0,0)]'} ml-2 border-2 border-dashed rounded-2xl min-w-[120px] h-[90px] text-center"
 				>
 					<input class="hidden" type="file" id="fileInput" on:change={onFilesChange} />
 					<label class="block w-[100%] h-[100%] flex items-center justify-center" for="fileInput">
@@ -211,7 +211,7 @@
 				{#if currentState !== undefined}
 					<div class="h-[100%] flex flex-col justify-center">
 						<div class="relative flex justify-center">
-							<div class="absolute right-0">
+							<div class="absolute right-0 top-2">
 								<a href={currentState.state.dataUrl} download={images[currentState.id].name}>
 									<button class="p-1 rounded-2xl border-2"> Download </button>
 								</a>
@@ -239,7 +239,7 @@
 			</div>
 		</div>
 	</div>
-	<div class="pl-2 w-[600px] overflow-auto">
+	<div class="p-2 overflow-auto">
 		<div>
 			<input
 				disabled={!currentState}
