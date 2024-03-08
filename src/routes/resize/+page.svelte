@@ -16,6 +16,7 @@
 			width: number;
 			height: number;
 			aspectRatio: undefined | number;
+			mimeType: string;
 			dataUrl: string;
 		};
 	} = {};
@@ -23,7 +24,13 @@
 		| undefined
 		| {
 				id: number;
-				state: { width: number; height: number; aspectRatio: undefined | number; dataUrl: string };
+				state: {
+					width: number;
+					height: number;
+					aspectRatio: undefined | number;
+					mimeType: string;
+					dataUrl: string;
+				};
 		  } = undefined;
 
 	function handleFiles(files: Array<File>) {
@@ -43,6 +50,7 @@
 								width: image.width,
 								height: image.height,
 								aspectRatio: image.width / image.height,
+								mimeType: image.mimeType,
 								dataUrl: dataUrl
 							}
 						};
@@ -74,17 +82,18 @@
 			imageId,
 			currentState!.state.width,
 			currentState!.state.height,
+			currentState!.state.mimeType,
 			smooth
 		);
 	}
 
-	function getScaledSize(scale: number, image: {width: number, height: number}){
+	function getScaledSize(scale: number, image: { width: number; height: number }) {
 		const width = image.width * scale;
 		let height = image.height * scale;
-		if(currentState?.state.aspectRatio){
-			height = width/currentState?.state.aspectRatio
+		if (currentState?.state.aspectRatio) {
+			height = width / currentState?.state.aspectRatio;
 		}
-		return {width, height}
+		return { width, height };
 	}
 
 	let onInputRangeDebounce: Function | undefined;
@@ -93,7 +102,7 @@
 		const scale = Number(event.target.value) / 100;
 		const imageId = currentState!.id;
 		const originalImage = images.find((x) => x.id == imageId);
-		const {width,height} = getScaledSize(scale,originalImage!)
+		const { width, height } = getScaledSize(scale, originalImage!);
 		scaleImage(width, height);
 		onInputRangeDebounce =
 			onInputRangeDebounce ??
@@ -108,14 +117,14 @@
 		const scale = Number(event.target.value) / 100;
 		const imageId = currentState!.id;
 		const originalImage = images.find((x) => x.id == imageId);
-		const {width,height} = getScaledSize(scale,originalImage!)
+		const { width, height } = getScaledSize(scale, originalImage!);
 		scaleImage(width, height, true);
 	}
 	function onChangeScaleInput(event: any) {
 		const scale = Number(event.target.value) / 100;
 		const imageId = currentState!.id;
 		const originalImage = images.find((x) => x.id == imageId);
-		const {width,height} = getScaledSize(scale,originalImage!)
+		const { width, height } = getScaledSize(scale, originalImage!);
 		scaleImage(width, height, true);
 	}
 	function onChangeWidth(event: any) {
@@ -149,6 +158,40 @@
 			return 1;
 		}
 		return width / originalImage!.width;
+	}
+
+	function changeToPng() {
+		currentState!.state.mimeType = 'image/png';
+		scaleImage(currentState!.state.width, currentState!.state.height, true);
+	}
+	function changeToJpeg() {
+		currentState!.state.mimeType = 'image/jpeg';
+		scaleImage(currentState!.state.width, currentState!.state.height, true);
+	}
+	function changeToWebP() {
+		currentState!.state.mimeType = 'image/webp';
+		scaleImage(currentState!.state.width, currentState!.state.height, true);
+	}
+	function replaceExtensionWithCurrentOne(filename: string) {
+		let extension: string;
+		switch (currentState?.state.mimeType) {
+			case 'image/png':
+				extension = 'png';
+				break;
+			case 'image/jpeg':
+				extension = 'jpeg';
+				break;
+			case 'image/webp':
+				extension = 'webp';
+				break;
+			default:
+				extension = 'bin';
+				break;
+		}
+		const parts = filename.split('.');
+		parts.pop();
+		parts.push(extension);
+		return parts.join('.');
 	}
 	var gcd = function (a: number, b: number) {
 		if (!b) {
@@ -212,7 +255,28 @@
 					<div class="h-[100%] flex flex-col justify-center">
 						<div class="relative flex justify-center">
 							<div class="absolute right-0 top-2">
-								<a href={currentState.state.dataUrl} download={images[currentState.id].name}>
+								<button
+									on:click={changeToPng}
+									class="{currentState.state.mimeType != 'image/png'
+										? 'text-[#777]'
+										: 'text-[#ccc]'} border-2 rounded-2xl p-1">PNG</button
+								>
+								<button
+									on:click={changeToJpeg}
+									class="{currentState.state.mimeType != 'image/jpeg'
+										? 'text-[#777]'
+										: 'text-[#ccc]'} border-2 rounded-2xl p-1">JPEG</button
+								>
+								<button
+									on:click={changeToWebP}
+									class="{currentState.state.mimeType != 'image/webp'
+										? 'text-[#777]'
+										: 'text-[#ccc]'} border-2 rounded-2xl p-1">WEBP</button
+								>
+								<a
+									href={currentState.state.dataUrl}
+									download={replaceExtensionWithCurrentOne(images[currentState.id].name)}
+								>
 									<button class="p-1 rounded-2xl border-2"> Download </button>
 								</a>
 							</div>
@@ -278,7 +342,9 @@
 					step="1"
 					value={currentState?.state.width ?? 0}
 					on:input={onChangeWidth}
-				/> x <input
+				/>
+				x
+				<input
 					disabled={!currentState}
 					class="w-[50px]"
 					type="number"
@@ -293,7 +359,7 @@
 			<input
 				type="checkbox"
 				disabled={!currentState}
-				checked={currentState?!!currentState.state.aspectRatio: true}
+				checked={currentState ? !!currentState.state.aspectRatio : true}
 				on:change={toggleApectRatio}
 			/>
 			Lock aspect ratio

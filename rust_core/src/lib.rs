@@ -62,13 +62,13 @@ pub fn add_image(name: &str, data_url: &str) {
                     let mut image_id_mutex = IMAGE_INCREMENT.lock().unwrap();
                     images_mutex.push(AppImage{
                         id: *image_id_mutex,
-                        name: name.to_string().replace(".jpg",".png").replace(".jpeg", ".png"),
+                        name: name.to_string(),
                         width: image.width(),
                         height: image.height(),
                         mime_type: match mime_type.as_str(){
                             "image/png"=>MimeType::ImagePng,
-                            // TODO: fix bug exporting Jpeg
-                            "image/jpeg"=>MimeType::ImagePng,
+                            "image/jpeg"=>MimeType::ImageJpeg,
+                            "image/webp"=>MimeType::ImageWebP,
                             _ => {
                                 error!("Invalid mime type. Only png and jpeg is supported currently.");
                                 return;
@@ -95,7 +95,7 @@ pub fn get_images_info()-> String{
 }
 
 #[wasm_bindgen]
-pub fn scale_image(id: u32, width: u32, height: u32, smooth: bool) -> String{
+pub fn scale_image(id: u32, width: u32, height: u32, mime_type: &str, smooth: bool,) -> String{
     let images_mutex = &*IMAGES.lock().unwrap();
     let image_option= images_mutex.iter().find(|e|e.id == id);
     match image_option {
@@ -103,20 +103,23 @@ pub fn scale_image(id: u32, width: u32, height: u32, smooth: bool) -> String{
             info!("No image to scale");
         }
         Some(app_image) => {
-            let mime_type = &app_image.mime_type;
             let image = &app_image.lib_image;
             let image = imageops::resize(image, width, height, match smooth {false=>FilterType::Nearest, true=>FilterType::Gaussian});
             let mut buffer = Vec::new();
             match mime_type{
-                MimeType::ImagePng => {
+                "image/png" => {
                     let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png);
                 }
-                MimeType::ImageJpeg => {
+                "image/jpeg" => {
+                    let image = image::DynamicImage::from(image).into_rgb8();
                     let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg);
                 }
-                // _=>{
-                //     info!("Not compatible format: {mime_type}")
-                // }
+                "image/webp" => {
+                    let _ = image.write_to(&mut Cursor::new(&mut buffer), ImageFormat::WebP);
+                }
+                _=>{
+                    info!("Not compatible format: {mime_type}")
+                }
             }
             let image_base64 = general_purpose::STANDARD.encode(&buffer);
             return format!("data:{mime_type};base64,{image_base64}");

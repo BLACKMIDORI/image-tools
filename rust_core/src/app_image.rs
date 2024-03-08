@@ -30,12 +30,14 @@ pub struct AppImage{
 pub enum MimeType{
     ImagePng,
     ImageJpeg,
+    ImageWebP,
 }
 impl std::fmt::Display for MimeType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "{}", match self {
             MimeType::ImagePng => {"image/png"}
             MimeType::ImageJpeg => {"image/jpeg"}
+            MimeType::ImageWebP => {"image/webp"}
         })
     }
 }
