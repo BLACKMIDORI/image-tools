@@ -95,7 +95,7 @@ pub fn get_images_info()-> String{
 }
 
 #[wasm_bindgen]
-pub fn scale_image(id: u32, width: u32, height: u32, mime_type: &str, smooth: bool,) -> String{
+pub fn scale_image(id: u32, width: u32, height: u32, mime_type: &str, smooth: bool, custom_filter: &str) -> String{
     let images_mutex = &*IMAGES.lock().unwrap();
     let image_option= images_mutex.iter().find(|e|e.id == id);
     match image_option {
@@ -104,7 +104,12 @@ pub fn scale_image(id: u32, width: u32, height: u32, mime_type: &str, smooth: bo
         }
         Some(app_image) => {
             let image = &app_image.lib_image;
-            let image = imageops::resize(image, width, height, match smooth {false=>FilterType::Nearest, true=>FilterType::Gaussian});
+            let image = imageops::resize(image, width, height, match custom_filter{
+                "Triangle"=>FilterType::Triangle,
+                "CatmullRom"=>FilterType::CatmullRom,
+                "Lanczos3"=>FilterType::Lanczos3,
+                _=>match smooth {false=>FilterType::Nearest, true=>FilterType::Gaussian}
+            });
             let mut buffer = Vec::new();
             match mime_type{
                 "image/png" => {

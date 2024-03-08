@@ -74,7 +74,7 @@
 		handleFiles(files);
 	}
 
-	function scaleImage(width: number, height: number, smooth = false) {
+	function scaleImage(width: number, height: number, smooth = false, customFilter = '') {
 		const imageId = currentState!.id;
 		currentState!.state.width = Math.max(1, Math.round(width));
 		currentState!.state.height = Math.max(1, Math.round(height));
@@ -83,7 +83,8 @@
 			currentState!.state.width,
 			currentState!.state.height,
 			currentState!.state.mimeType,
-			smooth
+			smooth,
+			customFilter
 		);
 	}
 
@@ -172,6 +173,23 @@
 		currentState!.state.mimeType = 'image/webp';
 		scaleImage(currentState!.state.width, currentState!.state.height, true);
 	}
+	function renderCustom(customFilter: string) {
+		switch (customFilter) {
+			case 'Nearest':
+				scaleImage(currentState!.state.width, currentState!.state.height, false);
+				break;
+			case 'Triangle':
+				scaleImage(currentState!.state.width, currentState!.state.height, false, 'Triangle');
+				break;
+			case 'CatmullRom':
+				scaleImage(currentState!.state.width, currentState!.state.height, false, 'CatmullRom');
+				break;
+			case 'Lanczos3':
+				scaleImage(currentState!.state.width, currentState!.state.height, false, 'Lanczos3');
+				break;
+		}
+	}
+
 	function replaceExtensionWithCurrentOne(filename: string) {
 		let extension: string;
 		switch (currentState?.state.mimeType) {
@@ -351,8 +369,9 @@
 					step="1"
 					value={currentState?.state.height ?? 0}
 					on:input={onChangeHeight}
-				/></span
-			>
+				/>
+				&nbsp;&nbsp;
+			</span>
 
 			<br />
 			<br />
@@ -363,6 +382,21 @@
 				on:change={toggleApectRatio}
 			/>
 			Lock aspect ratio
+			<br />
+			<br />
+			{#if currentState?.state.mimeType == 'image/webp'}
+				WebP doesn't render?
+				<br />
+				Try rendering once:
+				<br />
+				<button on:click={() => renderCustom('Nearest')}>Nearest(fast)</button>
+				<br />
+				<button on:click={() => renderCustom('CatmullRom')}>CatmullRom(smooth)</button>
+				<br />
+				<button on:click={() => renderCustom('Triangle')}>Triangle</button>
+				<br />
+				<button on:click={() => renderCustom('Lanczos3')}>Lanczos3</button>
+			{/if}
 		</div>
 	</div>
 </div>
